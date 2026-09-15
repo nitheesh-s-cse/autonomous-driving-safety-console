@@ -60,8 +60,29 @@ export function updateAgent(agent: AgentState, dt: number, rand: () => number, e
     case "cutIn": {
       const targetY = agent.path && agent.path[0] ? agent.path[0].y : 0;
       const dy = targetY - position.y;
-      const lateralStep = Math.sign(dy) * Math.min(Math.abs(dy), 0.6 * dt);
-      position = { x: position.x + speed * dt, y: position.y + lateralStep };
+      const absDy = Math.abs(dy);
+
+      if (absDy > 0.08) {
+        // Phase 1: Dynamic cut-in merge into ego's lane
+        const lateralRate = 1.8; // m/s lateral merge speed
+        const lateralStep = Math.sign(dy) * Math.min(absDy, lateralRate * dt);
+        const forwardStep = Math.max(0.1, speed * dt);
+        heading = Math.atan2(lateralStep, forwardStep);
+        position = { x: position.x + forwardStep, y: position.y + lateralStep };
+
+        // Progressive throttle as rider cuts into the lane
+        speed = Math.min(13.0, speed + 2.5 * dt);
+      } else {
+        // Phase 2: Merge completed — straighten up, accelerate aggressively forward,
+        // zooming ahead of ego and traveling beyond the camera frame.
+        position = { x: position.x + speed * dt, y: targetY };
+        heading = heading * Math.max(0, 1 - 10 * dt);
+
+        // Rapid acceleration up to 22 m/s (~79 km/h)
+        const maxSpeed = 22.0;
+        const accelRate = 5.5; // m/s²
+        speed = Math.min(maxSpeed, speed + accelRate * dt);
+      }
       break;
     }
     case "erratic": {
@@ -103,5 +124,5 @@ export function updateAgent(agent: AgentState, dt: number, rand: () => number, e
     }
   }
 
-  return { ...agent, position, heading, pathIndex, hidden };
+  return { ...agent, position, heading, speed, pathIndex, hidden };
 }

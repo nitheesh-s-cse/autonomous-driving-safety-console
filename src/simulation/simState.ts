@@ -173,10 +173,21 @@ export function stepState(state: SimState, dt: number): void {
   // --- Kinematics for all dynamic agents (perception/occlusion resolves
   // continuously as ego moves through the world) ---------------------------
   const previousHidden = new Map(state.agents.map((a) => [a.id, a.hidden]));
-  state.agents = state.agents
-    .map((a) => updateAgent(a, dt, state.rand, state.ego.position.x, roadHalfWidth))
-    .filter((a) => a.ttl === undefined || state.simTime < a.ttl)
-    .filter((a) => a.position.x - state.ego.position.x > -20); // drop agents left far behind
+  const updatedAgents: AgentState[] = [];
+  for (const a of state.agents) {
+    const updated = updateAgent(a, dt, state.rand, state.ego.position.x, roadHalfWidth);
+    if (updated.ttl !== undefined && state.simTime >= updated.ttl) continue;
+    if (updated.position.x - state.ego.position.x <= -20) continue; // drop agents left far behind
+
+    // Clean up cut-in hazard agents once they have moved far ahead beyond the visible frame
+    if (updated.hazardTag === "twowheeler-cutin" && updated.position.x - state.ego.position.x > 95) {
+      pushEvent(state, "SCENARIO", `Hazard cleared · ${updated.label} moved beyond frame`);
+      continue;
+    }
+
+    updatedAgents.push(updated);
+  }
+  state.agents = updatedAgents;
 
   for (const a of state.agents) {
     const wasHidden = previousHidden.get(a.id);
