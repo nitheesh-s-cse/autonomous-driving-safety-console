@@ -6,6 +6,7 @@ import type {
   VisualizationLayers,
 } from "./types";
 import { createInitialState, injectHazard, stepState, type SimState } from "./simState";
+import { HAZARD_META } from "./hazards";
 import { makeSeed } from "./seededRandom";
 import { FIXED_DT, UI_PUBLISH_HZ } from "./constants";
 
@@ -115,6 +116,9 @@ export class SimulationEngine {
   }
 
   injectHazard(hazard: HazardType): string {
+    if (HAZARD_META[hazard]?.underDevelopment) {
+      return "";
+    }
     const agent = injectHazard(this.state, hazard);
     this.publish(true);
     return agent.label;

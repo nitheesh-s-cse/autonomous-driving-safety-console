@@ -75,14 +75,22 @@ export function ComparisonPanel({
                 onChange={(e) => setHazard(e.target.value as HazardType)}
                 className="rounded-[6px] border border-white/[0.1] bg-[#10161d] px-2 py-1.5 text-[12px] text-[#F4F7FA]"
               >
-                {HAZARDS.map((h) => (
-                  <option key={h} value={h}>
-                    {HAZARD_META[h].label}
-                  </option>
-                ))}
+                {HAZARDS.map((h) => {
+                  const isDev = HAZARD_META[h]?.underDevelopment;
+                  return (
+                    <option key={h} value={h} disabled={isDev}>
+                      {HAZARD_META[h].label} {isDev ? "— (Under Development)" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
-            <Button size="sm" onClick={run} disabled={running} className="mt-4">
+            <Button
+              size="sm"
+              onClick={run}
+              disabled={running || HAZARD_META[hazard]?.underDevelopment}
+              className="mt-4"
+            >
               <Play size={13} /> {running ? "Running…" : "Run Comparison"}
             </Button>
           </div>

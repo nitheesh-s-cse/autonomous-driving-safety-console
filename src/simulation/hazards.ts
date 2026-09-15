@@ -2,14 +2,56 @@ import type { AgentState, EgoState, HazardType, RoadDefinition } from "./types";
 import { nextId } from "./scenarios";
 import { randInt } from "./seededRandom";
 
-export const HAZARD_META: Record<HazardType, { label: string; description: string }> = {
-  "pedestrian-crossing": { label: "Pedestrian Crossing", description: "Pedestrian enters road ahead" },
-  "twowheeler-cutin": { label: "Two-Wheeler Cut-In", description: "Bike merges into lane" },
-  "sudden-obstacle": { label: "Sudden Obstacle", description: "Static obstacle in lane" },
-  "wrongside-vehicle": { label: "Wrong-Side Vehicle", description: "Oncoming vehicle in lane" },
-  "cattle-crossing": { label: "Cattle Crossing", description: "Animal wanders toward road" },
-  "hidden-pedestrian": { label: "Hidden Pedestrian", description: "Pedestrian occluded until close range" },
+export interface HazardMeta {
+  label: string;
+  description: string;
+  underDevelopment?: boolean;
+}
+
+export const HAZARD_META: Record<HazardType, HazardMeta> = {
+  "pedestrian-crossing": {
+    label: "Pedestrian Crossing",
+    description: "Pedestrian enters road ahead",
+    underDevelopment: false,
+  },
+  "twowheeler-cutin": {
+    label: "Two-Wheeler Cut-In",
+    description: "Bike merges into lane",
+    underDevelopment: false,
+  },
+  "sudden-obstacle": {
+    label: "Sudden Obstacle",
+    description: "Static obstacle in lane",
+    underDevelopment: true,
+  },
+  "wrongside-vehicle": {
+    label: "Wrong-Side Vehicle",
+    description: "Oncoming vehicle in lane",
+    underDevelopment: true,
+  },
+  "cattle-crossing": {
+    label: "Cattle Crossing",
+    description: "Animal wanders toward road",
+    underDevelopment: true,
+  },
+  "hidden-pedestrian": {
+    label: "Hidden Pedestrian",
+    description: "Pedestrian occluded until close range",
+    underDevelopment: true,
+  },
 };
+
+export const ACTIVE_HAZARDS: HazardType[] = [
+  "pedestrian-crossing",
+  "twowheeler-cutin",
+];
+
+export const DEV_HAZARDS: HazardType[] = [
+  "sudden-obstacle",
+  "wrongside-vehicle",
+  "cattle-crossing",
+  "hidden-pedestrian",
+];
 
 export function createHazardAgent(
   type: HazardType,
