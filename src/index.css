@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
+
+  --color-bg-base: #070a0e;
+  --color-bg-secondary: #0b1016;
+  --color-bg-elevated: #10161d;
+  --color-bg-elevated-2: #141c24;
+
+  --color-border-default: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+
+  --color-text-primary: #f4f7fa;
+  --color-text-secondary: #a7b0ba;
+  --color-text-muted: #697582;
+
+  --color-accent-cyan: #21d4fd;
+  --color-accent-blue: #3b82f6;
+
+  --color-safe: #3ddc97;
+  --color-caution: #ffb547;
+  --color-critical: #ff4d5e;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background: var(--color-bg-base);
+    color: var(--color-text-primary);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: rgba(33, 212, 253, 0.25);
+  }
+  button:focus-visible,
+  a:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid #21d4fd;
+    outline-offset: 1px;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
+
+@keyframes ring-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 94, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(255, 77, 94, 0);
+  }
+}
+.animate-ring-pulse {
+  animation: ring-pulse 1.4s ease-out infinite;
+}
