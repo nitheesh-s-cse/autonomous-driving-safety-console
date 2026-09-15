@@ -27,7 +27,7 @@ import { runSafetyReflex } from "./safetyReflex";
 import { updateAgent } from "./agentModel";
 import { updateEgo } from "./vehicleModel";
 import { createHazardAgent, HAZARD_META } from "./hazards";
-import { DETECTION_RANGE, EMERGENCY_DECEL, BASELINE_EMERGENCY_DECEL, PLANNER_DT, REFLEX_DT, MS_PER_KMH } from "./constants";
+import { DETECTION_RANGE, EMERGENCY_DECEL, BASELINE_EMERGENCY_DECEL, PLANNER_DT, REFLEX_DT, MS_PER_KMH, SAFE_STOPPING_BUFFER } from "./constants";
 
 export interface SimState {
   scenarioId: ScenarioId;
@@ -266,9 +266,10 @@ export function stepState(state: SimState, dt: number): void {
     }
 
     const emergencyDecel = state.mode === "ALIENX" ? EMERGENCY_DECEL : BASELINE_EMERGENCY_DECEL;
+    const distToBuffer = Math.max(0, state.risk.nearestDistance - SAFE_STOPPING_BUFFER);
     state.controlAccel = state.reflex.overrideActive
       ? -emergencyDecel
-      : accelerationForTarget(state.ego, state.planner.targetSpeed);
+      : accelerationForTarget(state.ego, state.planner.targetSpeed, distToBuffer);
 
     state.pipelineStage = state.reflex.overrideActive
       ? "ACT"

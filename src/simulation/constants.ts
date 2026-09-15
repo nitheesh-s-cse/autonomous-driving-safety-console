@@ -12,6 +12,8 @@ export const UI_PUBLISH_HZ = 10;
 export const MS_PER_KMH = 1 / 3.6;
 
 // Vehicle dynamics
+export const EGO_HALF_LENGTH = 2.2; // meters from vehicle center to front/rear bumper
+export const SAFE_STOPPING_BUFFER = 3.0; // desired standstill gap (m) between front bumper and obstacle
 export const CRUISE_ACCEL = 1.4; // m/s^2 comfortable acceleration
 export const COMFORT_DECEL = 2.2; // m/s^2 planner controlled deceleration
 export const EMERGENCY_DECEL = 7.5; // m/s^2 safety-reflex emergency braking

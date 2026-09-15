@@ -444,17 +444,23 @@ function drawAgents(
       ctx.lineTo(-r, 0);
       ctx.closePath();
       ctx.fill();
+    } else if (a.type === "bike") {
+      drawRealisticBike(ctx, r * 2.5, r * 1.2, color);
     } else {
-      // vehicle / bike rectangle, rotated with heading already applied
-      const length = a.type === "bike" ? r * 2.2 : r * 2.6;
-      const width = a.type === "bike" ? r * 1.0 : r * 1.7;
-      ctx.fillStyle = "#0f151b";
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.roundRect(-length / 2, -width / 2, length, width, 3);
-      ctx.fill();
-      ctx.stroke();
+      // vehicle agent: realistic top-down car
+      const length = r * 2.8;
+      const width = r * 1.45;
+      const isCutIn = a.behavior === "cutIn";
+      drawRealisticCar({
+        ctx,
+        length,
+        width,
+        color,
+        isEgo: false,
+        braking: false,
+        turnSignal: isCutIn ? (a.position.y > 0 ? "left" : "right") : "none",
+        steeringAngle: isCutIn ? (a.position.y > 0 ? -0.12 : 0.12) : 0,
+      });
     }
     ctx.restore();
 
@@ -493,6 +499,418 @@ function drawAgents(
   }
 }
 
+interface RealisticCarProps {
+  ctx: CanvasRenderingContext2D;
+  length: number;
+  width: number;
+  color: string;
+  isEgo: boolean;
+  braking?: boolean;
+  emergencyBraking?: boolean;
+  turnSignal?: "left" | "right" | "none";
+  steeringAngle?: number;
+  speed?: number;
+}
+
+function drawRealisticCar({
+  ctx,
+  length,
+  width,
+  color,
+  isEgo,
+  braking,
+  emergencyBraking,
+  turnSignal = "none",
+  steeringAngle = 0,
+}: RealisticCarProps) {
+  const isBrakingActive = Boolean(braking || emergencyBraking);
+  const blinkOn = Math.floor(performance.now() / 260) % 2 === 0;
+
+  // 1. Headlight Projector Cones (Volumetric forward light throw on the road)
+  const beamLength = Math.max(30, length * 2.1);
+  const beamSpread = width * 0.44;
+  const drawLightBeam = (sourceY: number) => {
+    ctx.save();
+    const grad = ctx.createLinearGradient(length * 0.44, sourceY, length * 0.44 + beamLength, sourceY);
+    grad.addColorStop(0, isEgo ? "rgba(33, 212, 253, 0.28)" : "rgba(255, 250, 220, 0.20)");
+    grad.addColorStop(0.35, isEgo ? "rgba(33, 212, 253, 0.09)" : "rgba(255, 250, 220, 0.07)");
+    grad.addColorStop(1, "rgba(33, 212, 253, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(length * 0.44, sourceY);
+    ctx.lineTo(length * 0.44 + beamLength, sourceY - beamSpread);
+    ctx.lineTo(length * 0.44 + beamLength, sourceY + beamSpread);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+  drawLightBeam(-width * 0.28);
+  drawLightBeam(width * 0.28);
+
+  // 2. Ambient Occlusion / Drop Shadow under the car body
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
+  ctx.beginPath();
+  ctx.roundRect(-length * 0.48, -width * 0.48, length * 0.96, width * 0.96, width * 0.22);
+  ctx.fill();
+  ctx.restore();
+
+  // 3. Wheels / Tires (4 tires with rubber tread and alloy rim)
+  const tireLength = length * 0.22;
+  const tireWidth = width * 0.16;
+  const wheelBase = length * 0.27;
+  const track = width * 0.45;
+
+  const drawTire = (x: number, y: number, steer: number = 0) => {
+    ctx.save();
+    ctx.translate(x, y);
+    if (steer !== 0) ctx.rotate(steer);
+    // Rubber tire
+    ctx.fillStyle = "#0c1015";
+    ctx.strokeStyle = "#25303d";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(-tireLength / 2, -tireWidth / 2, tireLength, tireWidth, 2.5);
+    ctx.fill();
+    ctx.stroke();
+    // Alloy rim accent
+    ctx.strokeStyle = isEgo ? "rgba(33, 212, 253, 0.5)" : "rgba(255, 255, 255, 0.3)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-tireLength * 0.24, 0);
+    ctx.lineTo(tireLength * 0.24, 0);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  // Front tires with dynamic steering angle
+  drawTire(wheelBase, -track, steeringAngle);
+  drawTire(wheelBase, track, steeringAngle);
+  // Rear fixed tires
+  drawTire(-wheelBase, -track, 0);
+  drawTire(-wheelBase, track, 0);
+
+  // 4. Aerodynamic Sculpted Chassis / Body
+  ctx.save();
+  ctx.beginPath();
+  // Nose front center
+  ctx.moveTo(length * 0.49, 0);
+  // Front left bumper
+  ctx.bezierCurveTo(length * 0.49, -width * 0.24, length * 0.46, -width * 0.40, length * 0.36, -width * 0.45);
+  // Front left wheel arch
+  ctx.bezierCurveTo(length * 0.28, -width * 0.49, length * 0.22, -width * 0.49, length * 0.15, -width * 0.44);
+  // Cabin left waist
+  ctx.bezierCurveTo(length * 0.05, -width * 0.41, -length * 0.05, -width * 0.41, -length * 0.15, -width * 0.44);
+  // Rear left wheel arch
+  ctx.bezierCurveTo(-length * 0.22, -width * 0.49, -length * 0.28, -width * 0.49, -length * 0.36, -width * 0.45);
+  // Rear left bumper corner
+  ctx.bezierCurveTo(-length * 0.45, -width * 0.40, -length * 0.49, -width * 0.24, -length * 0.49, 0);
+  // Rear right bumper corner
+  ctx.bezierCurveTo(-length * 0.49, width * 0.24, -length * 0.45, width * 0.40, -length * 0.36, width * 0.45);
+  // Rear right wheel arch
+  ctx.bezierCurveTo(-length * 0.28, width * 0.49, -length * 0.22, width * 0.49, -length * 0.15, width * 0.44);
+  // Cabin right waist
+  ctx.bezierCurveTo(-length * 0.05, width * 0.41, length * 0.05, width * 0.41, length * 0.15, width * 0.44);
+  // Front right wheel arch
+  ctx.bezierCurveTo(length * 0.22, width * 0.49, length * 0.28, width * 0.49, length * 0.36, width * 0.45);
+  // Front right bumper
+  ctx.bezierCurveTo(length * 0.46, width * 0.40, length * 0.49, width * 0.24, length * 0.49, 0);
+  ctx.closePath();
+
+  // Metallic body paint gradient
+  const bodyGrad = ctx.createLinearGradient(-length * 0.5, 0, length * 0.5, 0);
+  if (isEgo) {
+    bodyGrad.addColorStop(0, "#0c131a");
+    bodyGrad.addColorStop(0.35, "#14202c");
+    bodyGrad.addColorStop(0.7, "#192938");
+    bodyGrad.addColorStop(1, "#121d28");
+  } else {
+    bodyGrad.addColorStop(0, "#0f1620");
+    bodyGrad.addColorStop(0.4, "#192432");
+    bodyGrad.addColorStop(1, "#121a24");
+  }
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // Sleek cyber perimeter edge stroke
+  ctx.strokeStyle = isEgo ? "#21D4FD" : color;
+  ctx.lineWidth = isEgo ? 1.7 : 1.3;
+  ctx.stroke();
+  ctx.restore();
+
+  // 5. Hood Power-Creases
+  ctx.save();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(length * 0.15, -width * 0.27);
+  ctx.lineTo(length * 0.41, -width * 0.14);
+  ctx.moveTo(length * 0.15, width * 0.27);
+  ctx.lineTo(length * 0.41, width * 0.14);
+  ctx.stroke();
+  ctx.restore();
+
+  // 6. Aerodynamic Side Wing Mirrors
+  const mirrorX = length * 0.14;
+  const mirrorY = width * 0.52;
+  const mirrorW = length * 0.08;
+  const mirrorH = width * 0.13;
+  ctx.save();
+  ctx.fillStyle = "#101822";
+  ctx.strokeStyle = isEgo ? "#21D4FD" : color;
+  ctx.lineWidth = 1;
+  // Left mirror
+  ctx.beginPath();
+  ctx.roundRect(mirrorX - mirrorW / 2, -mirrorY - mirrorH / 2, mirrorW, mirrorH, 2);
+  ctx.fill();
+  ctx.stroke();
+  // Right mirror
+  ctx.beginPath();
+  ctx.roundRect(mirrorX - mirrorW / 2, mirrorY - mirrorH / 2, mirrorW, mirrorH, 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  // 7. Glasshouse / Cabin: Windshield, Panoramic Roof, Rear Window
+  ctx.save();
+  // Front Windshield
+  ctx.beginPath();
+  ctx.moveTo(length * 0.21, -width * 0.32);
+  ctx.quadraticCurveTo(length * 0.23, 0, length * 0.21, width * 0.32);
+  ctx.lineTo(length * 0.08, width * 0.36);
+  ctx.quadraticCurveTo(length * 0.09, 0, length * 0.08, -width * 0.36);
+  ctx.closePath();
+  const wsGrad = ctx.createLinearGradient(length * 0.08, 0, length * 0.22, 0);
+  wsGrad.addColorStop(0, "#080e14");
+  wsGrad.addColorStop(1, isEgo ? "#13283a" : "#111c26");
+  ctx.fillStyle = wsGrad;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+
+  // Windshield light reflection slash
+  ctx.beginPath();
+  ctx.moveTo(length * 0.17, -width * 0.20);
+  ctx.lineTo(length * 0.10, width * 0.16);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+
+  // Panoramic Glass Roof
+  ctx.fillStyle = isEgo ? "#09121a" : "#0a0f14";
+  ctx.beginPath();
+  ctx.roundRect(-length * 0.16, -width * 0.34, length * 0.24, width * 0.68, 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // Rear Windshield
+  ctx.beginPath();
+  ctx.moveTo(-length * 0.16, -width * 0.34);
+  ctx.lineTo(-length * 0.16, width * 0.34);
+  ctx.lineTo(-length * 0.29, width * 0.27);
+  ctx.quadraticCurveTo(-length * 0.30, 0, -length * 0.29, -width * 0.27);
+  ctx.closePath();
+  ctx.fillStyle = "#070c10";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.restore();
+
+  // 8. Roof-Mounted LiDAR / Autonomous Sensor Turret (for Ego vehicle)
+  if (isEgo) {
+    const puckX = length * 0.02;
+    const puckR = Math.max(3.2, width * 0.15);
+    ctx.save();
+    // Base housing
+    ctx.fillStyle = "#091017";
+    ctx.strokeStyle = "#21D4FD";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(puckX, 0, puckR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Rotating LiDAR laser radar sweep
+    const sweepAngle = (performance.now() * 0.005) % (Math.PI * 2);
+    ctx.beginPath();
+    ctx.moveTo(puckX, 0);
+    ctx.arc(puckX, 0, puckR * 0.85, sweepAngle - 0.8, sweepAngle);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(33, 212, 253, 0.55)";
+    ctx.fill();
+
+    // Core optics lens
+    ctx.fillStyle = "#E0F7FF";
+    ctx.beginPath();
+    ctx.arc(puckX, 0, puckR * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 9. LED Headlights & Daytime Running Lights (DRLs)
+  const hlX = length * 0.44;
+  const hlY = width * 0.34;
+  const drawHeadlight = (sign: number) => {
+    ctx.save();
+    ctx.fillStyle = "#FFFFFF";
+    ctx.strokeStyle = isEgo ? "#21D4FD" : "#E2E8F0";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(hlX, sign * hlY);
+    ctx.lineTo(length * 0.48, sign * (hlY - width * 0.09));
+    ctx.lineTo(length * 0.46, sign * (hlY - width * 0.15));
+    ctx.lineTo(hlX - length * 0.03, sign * (hlY - width * 0.05));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  };
+  drawHeadlight(-1);
+  drawHeadlight(1);
+
+  // 10. Rear Taillights & Dynamic Brake Lights
+  const tailX = -length * 0.48;
+  const tailY = width * 0.34;
+
+  // Rear brake road illumination halo
+  if (isBrakingActive) {
+    ctx.save();
+    const brakeHalo = ctx.createRadialGradient(tailX, 0, 1, tailX - length * 0.4, 0, length * 0.7);
+    brakeHalo.addColorStop(0, emergencyBraking ? "rgba(255, 30, 56, 0.55)" : "rgba(255, 45, 65, 0.38)");
+    brakeHalo.addColorStop(1, "rgba(255, 0, 0, 0)");
+    ctx.fillStyle = brakeHalo;
+    ctx.beginPath();
+    ctx.arc(tailX, 0, length * 0.7, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Taillight bar
+  ctx.save();
+  const tailColor = isBrakingActive
+    ? (emergencyBraking ? "#FF1E38" : "#FF334B")
+    : "#c81e30";
+  ctx.strokeStyle = tailColor;
+  ctx.lineWidth = isBrakingActive ? 2.5 : 1.8;
+  ctx.shadowColor = tailColor;
+  ctx.shadowBlur = isBrakingActive ? 8 : 2;
+  ctx.beginPath();
+  ctx.moveTo(tailX + length * 0.03, -tailY);
+  ctx.lineTo(tailX, -tailY * 0.6);
+  ctx.lineTo(tailX, tailY * 0.6);
+  ctx.lineTo(tailX + length * 0.03, tailY);
+  ctx.stroke();
+  ctx.restore();
+
+  // 11. Dynamic Turn Signals
+  if (turnSignal !== "none" && blinkOn) {
+    const sign = turnSignal === "right" ? 1 : -1;
+    ctx.save();
+    ctx.fillStyle = "#FFB547";
+    ctx.shadowColor = "#FFB547";
+    ctx.shadowBlur = 6;
+    // Front corner blinker
+    ctx.beginPath();
+    ctx.arc(length * 0.44, sign * (width * 0.38), 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    // Mirror blinker
+    ctx.beginPath();
+    ctx.arc(mirrorX, sign * (mirrorY + 2), 2, 0, Math.PI * 2);
+    ctx.fill();
+    // Rear corner blinker
+    ctx.beginPath();
+    ctx.arc(tailX + 2, sign * (tailY - 2), 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawRealisticBike(
+  ctx: CanvasRenderingContext2D,
+  length: number,
+  width: number,
+  color: string,
+) {
+  ctx.save();
+  // Ground shadow
+  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, length * 0.48, width * 0.38, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Front wheel tire
+  ctx.fillStyle = "#0c1015";
+  ctx.strokeStyle = "#2e3b48";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(length * 0.28, -width * 0.12, length * 0.22, width * 0.24, 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Rear wheel tire
+  ctx.beginPath();
+  ctx.roundRect(-length * 0.44, -width * 0.12, length * 0.22, width * 0.24, 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // Bike Frame / Backbone
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(-length * 0.32, 0);
+  ctx.lineTo(0, 0);
+  ctx.lineTo(length * 0.28, 0);
+  ctx.stroke();
+
+  // Handlebars
+  ctx.strokeStyle = "#94a3b8";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(length * 0.20, -width * 0.44);
+  ctx.lineTo(length * 0.20, width * 0.44);
+  ctx.stroke();
+  // Handlebar grips
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(length * 0.17, -width * 0.47, length * 0.06, width * 0.12);
+  ctx.fillRect(length * 0.17, width * 0.35, length * 0.06, width * 0.12);
+
+  // Rider torso & shoulders
+  ctx.fillStyle = "#1e293b";
+  ctx.beginPath();
+  ctx.ellipse(-length * 0.06, 0, length * 0.18, width * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rider Helmet
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(-length * 0.04, 0, width * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  // Helmet visor
+  ctx.fillStyle = "#0f172a";
+  ctx.beginPath();
+  ctx.arc(-length * 0.01, 0, width * 0.16, -0.6, 0.6);
+  ctx.lineTo(-length * 0.01, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // Front headlight
+  ctx.fillStyle = "#FDE047";
+  ctx.beginPath();
+  ctx.arc(length * 0.40, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rear taillight
+  ctx.fillStyle = "#EF4444";
+  ctx.beginPath();
+  ctx.arc(-length * 0.46, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawEgo(
   ctx: CanvasRenderingContext2D,
   toScreen: (x: number, y: number) => Vec2,
@@ -503,70 +921,82 @@ function drawEgo(
   pxPerMeter: number,
 ) {
   const p = toScreen(egoX, egoLateral);
-  const length = 4.2 * pxPerMeter;
-  const width = 1.9 * pxPerMeter;
+  const length = 4.4 * pxPerMeter;
+  const width = 2.0 * pxPerMeter;
+
+  // Road curvature alignment so the car naturally follows bends in the road
+  const pAhead = toScreen(egoX + 0.6, egoLateral);
+  const roadAngle = Math.atan2(pAhead.y - p.y, pAhead.x - p.x);
 
   ctx.save();
   ctx.translate(p.x, p.y);
+  ctx.rotate(roadAngle);
 
-  // Sensor field
-  ctx.globalAlpha = 0.06;
+  // Sensor field cone (starts gracefully from the front sensor position)
+  ctx.globalAlpha = 0.07;
   ctx.fillStyle = "#21D4FD";
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.arc(0, 0, length * 3.2, -0.5, 0.5);
+  ctx.moveTo(length * 0.25, 0);
+  ctx.arc(length * 0.25, 0, length * 3.4, -0.48, 0.48);
   ctx.closePath();
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // Body
-  ctx.fillStyle = "#141c24";
-  ctx.strokeStyle = "#21D4FD";
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.roundRect(-length / 2, -width / 2, length, width, 4);
-  ctx.fill();
-  ctx.stroke();
+  // Steering angle based on lane changes / turn signal
+  const lateralDiff = curr.ego.targetLateral - curr.ego.lateral;
+  const steerAngle =
+    curr.ego.turnSignal === "left"
+      ? -0.15
+      : curr.ego.turnSignal === "right"
+      ? 0.15
+      : Math.max(-0.15, Math.min(0.15, lateralDiff * 0.25));
 
-  // Direction marker
-  ctx.fillStyle = "#21D4FD";
-  ctx.beginPath();
-  ctx.moveTo(length / 2 - 3, 0);
-  ctx.lineTo(length / 2 - 9, -4);
-  ctx.lineTo(length / 2 - 9, 4);
-  ctx.closePath();
-  ctx.fill();
-
-  // Brake lights
-  if (curr.ego.braking || curr.ego.emergencyBraking) {
-    ctx.fillStyle = curr.ego.emergencyBraking ? "#FF4D5E" : "#ff8a8a";
-    ctx.globalAlpha = curr.ego.emergencyBraking ? 1 : 0.8;
-    ctx.beginPath();
-    ctx.roundRect(-length / 2, -width / 2, 3, width, 1);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-
-  // Turn signal
-  if (curr.ego.turnSignal !== "none") {
-    const sign = curr.ego.turnSignal === "right" ? 1 : -1;
-    ctx.fillStyle = "#FFB547";
-    ctx.beginPath();
-    ctx.arc(length / 2 - 6, sign * (width / 2 + 2), 1.6, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // Render high-fidelity autonomous vehicle
+  drawRealisticCar({
+    ctx,
+    length,
+    width,
+    color: "#21D4FD",
+    isEgo: true,
+    braking: curr.ego.braking,
+    emergencyBraking: curr.ego.emergencyBraking,
+    turnSignal: curr.ego.turnSignal,
+    steeringAngle: steerAngle,
+    speed: egoSpeed,
+  });
 
   ctx.restore();
 
-  // Label
+  // Floating HUD Badge with speed and status
   ctx.save();
   ctx.font = "700 10px Inter, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillStyle = "rgba(7,10,14,0.78)";
-  const label = `EGO · ${Math.round(egoSpeed * 3.6)} km/h`;
+  const speedKmh = Math.round(egoSpeed * 3.6);
+  const label = `EGO · ${speedKmh} km/h`;
   const tw = ctx.measureText(label).width;
-  ctx.fillRect(p.x - tw / 2 - 5, p.y - width / 2 - 24, tw + 10, 15);
-  ctx.fillStyle = "#21D4FD";
-  ctx.fillText(label, p.x, p.y - width / 2 - 13);
+  const badgeY = p.y - width / 2 - 20;
+
+  // Glass pill backdrop
+  ctx.fillStyle = "rgba(7, 10, 14, 0.88)";
+  ctx.strokeStyle = "rgba(33, 212, 253, 0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(p.x - tw / 2 - 12, badgeY - 11, tw + 24, 18, 9);
+  ctx.fill();
+  ctx.stroke();
+
+  // Glowing status dot
+  const dotColor = curr.ego.emergencyBraking ? "#FF4D5E" : curr.ego.braking ? "#FFB547" : "#21D4FD";
+  ctx.fillStyle = dotColor;
+  ctx.shadowColor = dotColor;
+  ctx.shadowBlur = 4;
+  ctx.beginPath();
+  ctx.arc(p.x - tw / 2 - 3, badgeY - 2, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Text
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#F4F7FA";
+  ctx.fillText(label, p.x + 4, badgeY + 1.5);
   ctx.restore();
 }

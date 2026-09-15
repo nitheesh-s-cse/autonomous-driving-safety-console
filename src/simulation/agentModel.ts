@@ -46,7 +46,12 @@ export function updateAgent(agent: AgentState, dt: number, rand: () => number, e
         heading = Math.atan2(dy, dx);
         const step = Math.min(dist, speed * dt);
         position = { x: position.x + Math.cos(heading) * step, y: position.y + Math.sin(heading) * step };
-        if (dist < 0.5 && pathIndex < agent.path.length - 1) pathIndex += 1;
+        if (dist < 0.5 && pathIndex < agent.path.length - 1) {
+          pathIndex += 1;
+        } else if (dist < 0.5) {
+          // Continue moving forward off the road onto shoulder/sidewalk
+          position = { x: position.x + Math.cos(heading) * speed * dt, y: position.y + Math.sin(heading) * speed * dt };
+        }
       } else {
         position = { x: position.x + Math.cos(heading) * speed * dt, y: position.y + Math.sin(heading) * speed * dt };
       }
@@ -60,14 +65,40 @@ export function updateAgent(agent: AgentState, dt: number, rand: () => number, e
       break;
     }
     case "erratic": {
-      // Cattle-like unpredictable wander: small random lateral jitter with
-      // occasional larger excursions, clamped to road bounds.
-      const jitter = randRange(rand, -0.35, 0.35) * dt * 4;
-      let newY = position.y + jitter;
-      newY = Math.max(-roadHalfWidth + 0.5, Math.min(roadHalfWidth - 0.5, newY));
-      const forward = randRange(rand, -0.15, 0.25);
-      position = { x: position.x + forward * dt * 2, y: newY };
-      heading = Math.atan2(jitter, forward || 0.01);
+      // Cattle crossing with organic wander: advances across the roadway toward the
+      // opposite shoulder, with natural slight wandering.
+      if (agent.path && pathIndex !== undefined && agent.path[pathIndex]) {
+        const target = agent.path[pathIndex];
+        const dx = target.x - position.x;
+        const dy = target.y - position.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const crossAngle = Math.atan2(dy, dx);
+        const jitter = randRange(rand, -0.2, 0.2);
+        heading = crossAngle + jitter;
+        const step = Math.min(dist, speed * dt);
+        position = {
+          x: position.x + Math.cos(heading) * step,
+          y: position.y + Math.sin(heading) * step,
+        };
+        if (dist < 0.6 && pathIndex < agent.path.length - 1) {
+          pathIndex += 1;
+        } else if (dist < 0.6) {
+          // Already reached opposite shoulder; wander gently on shoulder
+          position = {
+            x: position.x + randRange(rand, -0.05, 0.15) * dt,
+            y: position.y + Math.sign(dy || 1) * 0.2 * dt,
+          };
+        }
+      } else {
+        // Fallback: cross toward opposite side of road
+        const crossDir = position.y >= 0 ? -1 : 1;
+        const jitter = randRange(rand, -0.15, 0.15);
+        position = {
+          x: position.x + randRange(rand, 0.05, 0.2) * dt,
+          y: position.y + (crossDir * speed * 0.8 + jitter) * dt,
+        };
+        heading = Math.atan2(crossDir * speed * 0.8 + jitter, 0.1);
+      }
       break;
     }
   }

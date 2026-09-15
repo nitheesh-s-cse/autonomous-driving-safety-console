@@ -117,17 +117,21 @@ export function createHazardAgent(
     }
     case "cattle-crossing": {
       const side = rand() > 0.5 ? 1 : -1;
+      const startY = side * (half + 0.4);
+      const targetY = -side * (half + 1.6);
       return {
         id: nextId("A"),
         label: `A-0${randInt(rand, 2, 9)}`,
         type: "cattle",
-        position: { x: ego.position.x + 32, y: side * (half - 1) },
+        position: { x: ego.position.x + 35, y: startY },
         heading: -side * Math.PI / 2,
-        speed: 0.5,
-        radius: 0.65,
+        speed: 0.85,
+        radius: 0.75,
         behavior: "erratic",
-        uncertainty: 0.6,
+        uncertainty: 0.5,
         hidden: false,
+        path: [{ x: ego.position.x + 39, y: targetY }],
+        pathIndex: 0,
         spawnTime: simTime,
         hazardTag: type,
       };

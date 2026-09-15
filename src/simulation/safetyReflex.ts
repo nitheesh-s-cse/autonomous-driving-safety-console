@@ -41,8 +41,11 @@ export function runSafetyReflex(state: SafetyReflexState, inputs: ReflexInputs):
   }
 
   // Release override once conditions are clearly safe again (hysteresis to
-  // avoid rapid flicker in/out of intervention).
-  const releaseSafe = risk.ttc > critical * 1.6 && risk.stoppingMargin > 3;
+  // avoid rapid flicker in/out of intervention), or when scene is clear.
+  const releaseSafe =
+    (risk.ttc > critical * 1.6 && risk.stoppingMargin > 2) ||
+    risk.level === "SAFE" ||
+    risk.nearestAgentId === null;
   if (state.overrideActive && !releaseSafe) {
     return {
       ...state,

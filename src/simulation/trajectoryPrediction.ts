@@ -57,8 +57,8 @@ export function planEgoPath(ego: EgoState, _road: RoadDefinition, horizonS = PRE
 }
 
 // Determines whether an agent's predicted path intersects the ego's
-// forward corridor (a lateral band around the planned path), returning a
-//0..1 conflict strength used by the risk model.
+// forward trajectory (checking true 2D spatio-temporal overlap at each time step),
+// returning a 0..1 conflict strength used by the risk model.
 export function pathConflictStrength(
   egoPath: { x: number; y: number }[],
   prediction: Prediction,
@@ -69,10 +69,17 @@ export function pathConflictStrength(
     const ep = egoPath[i];
     const pp = prediction.points[i];
     if (!pp) continue;
+
+    const longitudinalGap = Math.abs(ep.x - pp.x);
     const lateralGap = Math.abs(ep.y - pp.y);
+
+    const longThreshold = 3.8 + prediction.uncertainty[i] * 1.5;
     const band = corridorHalfWidth + prediction.uncertainty[i];
-    if (lateralGap < band) {
-      const strength = 1 - lateralGap / band;
+
+    if (longitudinalGap < longThreshold && lateralGap < band) {
+      const longFactor = 1 - longitudinalGap / longThreshold;
+      const latFactor = 1 - lateralGap / band;
+      const strength = Math.sqrt(longFactor * latFactor);
       if (strength > maxStrength) maxStrength = strength;
     }
   }
