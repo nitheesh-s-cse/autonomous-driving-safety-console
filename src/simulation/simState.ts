@@ -117,7 +117,7 @@ export function createInitialState(scenarioId: ScenarioId, mode: ControlMode, se
     plannedPath: planEgoPath(ego, scenario.road),
     replanPath: null,
     risk,
-    planner: { mode: "CRUISE", targetSpeed: ego.speed, targetLateral: 0, reasons: ["System initializing"], lastUpdate: 0, decisionCount: 0 },
+    planner: { mode: "CRUISE", targetSpeed: ego.speed, targetLateral: 0, reasons: ["System initializing"], lastUpdate: 0, decisionCount: 0, overtakePhase: "NONE", overtakeTargetId: null },
     reflex: { status: "MONITORING", triggers: [], lastUpdate: 0, overrideActive: false, activationCount: 0, stoppingMarginState: "NOMINAL" },
     events: [],
     eventSeq: 0,

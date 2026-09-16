@@ -20,6 +20,129 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
   let mode2: PlannerState["mode"] = "CRUISE";
   let targetSpeed = speedLimit;
   let targetLateral = state.targetLateral;
+  let overtakePhase: "NONE" | "PASSING" | "RETURNING" = state.overtakePhase || "NONE";
+  let overtakeTargetId: string | null = state.overtakeTargetId || null;
+
+  // --- Autonomous Overtake Subsystem (ALIEN X) -------------------------------
+  // Seamlessly overtakes slower vehicles (such as the two-wheeler B-01) ahead
+  // in the lane with smooth trajectory replanning and clearance validation.
+  if (mode === "ALIENX") {
+    // 1. If currently in PASSING phase:
+    if (overtakePhase === "PASSING" && overtakeTargetId) {
+      const target = agents.find((a) => a.id === overtakeTargetId);
+      if (target) {
+        const dx = target.position.x - ego.position.x;
+        // Keep passing until ego has advanced safely past the target vehicle (+9.0m)
+        if (dx > -9.0) {
+          const passSide = target.position.y <= 0 ? 1 : -1;
+          const passLateral = passSide * 1.85;
+          return {
+            mode: "REPLAN",
+            targetSpeed: Math.min(speedLimit, Math.max(ego.speed, target.speed + 3.2)),
+            targetLateral: passLateral,
+            reasons: [
+              `Autonomous overtake in progress · Passing ${target.label}`,
+              "Replan trajectory active · Adjacent corridor engaged",
+              "Maintaining safe lateral separation envelope",
+            ],
+            lastUpdate: inputs.simTime,
+            decisionCount: state.decisionCount + 1,
+            overtakePhase: "PASSING",
+            overtakeTargetId,
+          };
+        } else {
+          // Completed pass! Switch to RETURNING phase
+          overtakePhase = "RETURNING";
+          return {
+            mode: "REPLAN",
+            targetSpeed: speedLimit,
+            targetLateral: 0,
+            reasons: [
+              `Overtake of ${target.label} complete · Returning to lane centerline`,
+              "Re-centering trajectory engaged · Nominal corridor restoring",
+            ],
+            lastUpdate: inputs.simTime,
+            decisionCount: state.decisionCount + 1,
+            overtakePhase: "RETURNING",
+            overtakeTargetId,
+          };
+        }
+      } else {
+        overtakePhase = "NONE";
+        overtakeTargetId = null;
+      }
+    }
+
+    // 2. If in RETURNING phase:
+    if (overtakePhase === "RETURNING") {
+      if (Math.abs(ego.lateral) < 0.22) {
+        // Successfully re-centered!
+        overtakePhase = "NONE";
+        overtakeTargetId = null;
+      } else {
+        return {
+          mode: "REPLAN",
+          targetSpeed: speedLimit,
+          targetLateral: 0,
+          reasons: [
+            "Returning to nominal travel lane after overtake",
+            "Smoothly re-centering vehicle heading and lateral offset",
+          ],
+          lastUpdate: inputs.simTime,
+          decisionCount: state.decisionCount + 1,
+          overtakePhase: "RETURNING",
+          overtakeTargetId,
+        };
+      }
+    }
+
+    // 3. If in NONE phase, check if we should initiate an overtake:
+    if (overtakePhase === "NONE") {
+      const slowVehicle = agents.find((a) => {
+        if (a.type !== "bike" && a.type !== "vehicle") return false;
+        if (a.behavior !== "cruise" && a.behavior !== "ambient") return false;
+        const dx = a.position.x - ego.position.x;
+        // Approaching slow vehicle ahead between 4m and 38m
+        if (dx <= 4 || dx > 38) return false;
+        // Moving slower than our target speed limit by at least 2.0 m/s
+        if (a.speed >= speedLimit * 0.85) return false;
+        // Within our lane corridor
+        if (Math.abs(a.position.y - ego.lateral) > 2.0) return false;
+        return true;
+      });
+
+      if (slowVehicle) {
+        const passSide = slowVehicle.position.y <= 0 ? 1 : -1;
+        const passLateral = passSide * 1.85;
+        const isRoadSpaceAvailable = Math.abs(passLateral) <= roadHalfWidth - 0.8;
+        const isAdjacentClear = !agents.some(
+          (a) =>
+            a.id !== slowVehicle.id &&
+            Math.abs(a.position.y - passLateral) < 1.3 &&
+            Math.abs(a.position.x - ego.position.x) < 45,
+        );
+
+        if (isRoadSpaceAvailable && isAdjacentClear) {
+          overtakePhase = "PASSING";
+          overtakeTargetId = slowVehicle.id;
+          return {
+            mode: "REPLAN",
+            targetSpeed: Math.min(speedLimit, Math.max(ego.speed, slowVehicle.speed + 3.2)),
+            targetLateral: passLateral,
+            reasons: [
+              `Slower vehicle ahead (${slowVehicle.label}) · Safe overtake window identified`,
+              "Autonomous overtake engaged · Generating dynamic replan trajectory",
+              "Initiating smooth lane shift into adjacent corridor",
+            ],
+            lastUpdate: inputs.simTime,
+            decisionCount: state.decisionCount + 1,
+            overtakePhase: "PASSING",
+            overtakeTargetId,
+          };
+        }
+      }
+    }
+  }
 
   const cautionTtcThreshold = mode === "ALIENX" ? TTC_COMFORT : TTC_COMFORT * 0.7;
   const hardTtcThreshold = mode === "ALIENX" ? TTC_CAUTION : TTC_CAUTION * 0.75;
@@ -111,6 +234,8 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
     reasons,
     lastUpdate: inputs.simTime,
     decisionCount: state.decisionCount + 1,
+    overtakePhase,
+    overtakeTargetId,
   };
 }
 

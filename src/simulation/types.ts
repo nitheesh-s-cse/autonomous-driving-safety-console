@@ -115,6 +115,8 @@ export interface PlannerState {
   reasons: string[];
   lastUpdate: number;
   decisionCount: number;
+  overtakeTargetId?: string | null;
+  overtakePhase?: "NONE" | "PASSING" | "RETURNING";
 }
 
 export type ReflexStatus = "MONITORING" | "ACTIVE";

@@ -45,13 +45,20 @@ export function planEgoPath(ego: EgoState, _road: RoadDefinition, horizonS = PRE
   const steps = PREDICTION_STEPS;
   const dt = horizonS / steps;
   const pts: { x: number; y: number }[] = [];
-  let x = ego.position.x;
-  let lateral = ego.lateral;
-  const lateralStep = (ego.targetLateral - ego.lateral) / steps;
+  const startX = ego.position.x;
+  const startLateral = ego.lateral;
+  const deltaLat = ego.targetLateral - startLateral;
+
+  // Maintain realistic forward projection even while accelerating from a standstill
+  const forwardSpeed = Math.max(6.5, ego.speed);
+
   for (let i = 1; i <= steps; i++) {
-    x += ego.speed * dt;
-    lateral += lateralStep;
-    pts.push({ x, y: lateral });
+    const t = i / steps;
+    // Quintic polynomial ease: s(t) = 10t^3 - 15t^4 + 6t^5 (Frenet optimal trajectory)
+    const smoothT = t * t * t * (t * (t * 6 - 15) + 10);
+    const px = startX + forwardSpeed * (i * dt);
+    const py = startLateral + deltaLat * smoothT;
+    pts.push({ x: px, y: py });
   }
   return pts;
 }

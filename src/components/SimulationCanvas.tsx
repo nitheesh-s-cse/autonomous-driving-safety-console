@@ -342,25 +342,76 @@ function drawPredictions(ctx: CanvasRenderingContext2D, curr: EngineSnapshot, to
 }
 
 function drawPlannedPath(ctx: CanvasRenderingContext2D, curr: EngineSnapshot, toScreen: (x: number, y: number) => Vec2) {
-  const drawLine = (pts: Vec2[], color: string, dashed: boolean) => {
+  const isOvertake = curr.planner.mode === "REPLAN" && Boolean(curr.replanPath);
+  const activePath = isOvertake && curr.replanPath ? curr.replanPath : curr.plannedPath;
+
+  // 1. Draw autonomous vehicle safety corridor ribbon (navigable envelope ±0.85m)
+  if (activePath.length > 1) {
+    ctx.save();
+    ctx.fillStyle = isOvertake ? "rgba(33, 212, 253, 0.09)" : "rgba(33, 212, 253, 0.05)";
+    ctx.beginPath();
+    const startLeft = toScreen(curr.ego.position.x, curr.ego.lateral - 0.85);
+    ctx.moveTo(startLeft.x, startLeft.y);
+    activePath.forEach((p) => {
+      const s = toScreen(p.x, p.y - 0.85);
+      ctx.lineTo(s.x, s.y);
+    });
+    for (let i = activePath.length - 1; i >= 0; i--) {
+      const p = activePath[i];
+      const s = toScreen(p.x, p.y + 0.85);
+      ctx.lineTo(s.x, s.y);
+    }
+    const startRight = toScreen(curr.ego.position.x, curr.ego.lateral + 0.85);
+    ctx.lineTo(startRight.x, startRight.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 2. Trajectory line renderer with glowing beads and gradient line
+  const drawLine = (pts: Vec2[], color: string, dashed: boolean, isMain: boolean) => {
     if (pts.length === 0) return;
     ctx.save();
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    if (dashed) ctx.setLineDash([6, 5]);
+    ctx.lineWidth = isMain ? 2.4 : 1.6;
+    if (isMain) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = isOvertake ? 9 : 6;
+    }
+    if (dashed) ctx.setLineDash([5, 5]);
     ctx.beginPath();
     const start = toScreen(curr.ego.position.x, curr.ego.lateral);
     ctx.moveTo(start.x, start.y);
     pts.forEach((p, i) => {
       const s = toScreen(p.x, p.y);
-      ctx.globalAlpha = Math.max(0.08, 0.85 - i * 0.07);
+      ctx.globalAlpha = Math.max(0.1, 0.92 - i * 0.06);
       ctx.lineTo(s.x, s.y);
     });
     ctx.stroke();
+
+    // Trajectory waypoint nodes
+    if (isMain) {
+      ctx.setLineDash([]);
+      pts.forEach((p, i) => {
+        const s = toScreen(p.x, p.y);
+        ctx.globalAlpha = Math.max(0.2, 0.95 - i * 0.08);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, i === 0 ? 3.0 : 2.0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
     ctx.restore();
   };
-  drawLine(curr.plannedPath, "#21D4FD", false);
-  if (curr.replanPath) drawLine(curr.replanPath, "#3B82F6", true);
+
+  if (isOvertake && curr.replanPath) {
+    // Background: original centerline in subtle dashed gray
+    drawLine(curr.plannedPath, "rgba(255, 255, 255, 0.22)", true, false);
+    // Foreground: glowing cyber cyan overtake trajectory
+    drawLine(curr.replanPath, "#21D4FD", false, true);
+  } else {
+    drawLine(curr.plannedPath, "#21D4FD", false, true);
+  }
 }
 
 function agentColor(a: AgentState): string {
