@@ -64,14 +64,14 @@ export function updateAgent(agent: AgentState, dt: number, rand: () => number, e
 
       if (absDy > 0.08) {
         // Phase 1: Dynamic cut-in merge into ego's lane
-        const lateralRate = 1.8; // m/s lateral merge speed
+        const lateralRate = 2.0; // m/s lateral merge speed
         const lateralStep = Math.sign(dy) * Math.min(absDy, lateralRate * dt);
         const forwardStep = Math.max(0.1, speed * dt);
         heading = Math.atan2(lateralStep, forwardStep);
         position = { x: position.x + forwardStep, y: position.y + lateralStep };
 
         // Progressive throttle as rider cuts into the lane
-        speed = Math.min(13.0, speed + 2.5 * dt);
+        speed = Math.min(14.0, speed + 3.0 * dt);
       } else {
         // Phase 2: Merge completed — straighten up, accelerate aggressively forward,
         // zooming ahead of ego and traveling beyond the camera frame.
