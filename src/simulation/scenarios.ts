@@ -44,7 +44,7 @@ const villageRoad: ScenarioDefinition = {
         id: nextId("B"),
         label: "B-01",
         type: "bike",
-        position: { x: 38, y: -1.2 },
+        position: { x: 38, y: -2.0 },
         heading: 0,
         speed: 5.4,
         radius: 0.7,

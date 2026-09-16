@@ -20,12 +20,16 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
   let mode2: PlannerState["mode"] = "CRUISE";
   let targetSpeed = speedLimit;
   let targetLateral = state.targetLateral;
+  const nominalLane = -Math.min(2.0, Math.max(1.3, roadHalfWidth * 0.45)); // Indian rules: nominal driving in left lane
+  const overtakeLane = Math.min(2.0, Math.max(1.3, roadHalfWidth * 0.45));  // Indian rules: overtake via right lane
+
   let overtakePhase: "NONE" | "PASSING" | "RETURNING" = state.overtakePhase || "NONE";
   let overtakeTargetId: string | null = state.overtakeTargetId || null;
 
   // --- Autonomous Overtake Subsystem (ALIEN X) -------------------------------
-  // Seamlessly overtakes slower vehicles (such as the two-wheeler B-01) ahead
-  // in the lane with smooth trajectory replanning and clearance validation.
+  // Indian traffic rules compliant: Drives normally in the LEFT lane.
+  // When encountering a slower vehicle ahead, overtakes via the RIGHT lane,
+  // then safely returns to the LEFT lane.
   if (mode === "ALIENX") {
     // 1. If currently in PASSING phase:
     if (overtakePhase === "PASSING" && overtakeTargetId) {
@@ -34,15 +38,13 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
         const dx = target.position.x - ego.position.x;
         // Keep passing until ego has advanced safely past the target vehicle (+9.0m)
         if (dx > -9.0) {
-          const passSide = target.position.y <= 0 ? 1 : -1;
-          const passLateral = passSide * 1.85;
           return {
             mode: "REPLAN",
             targetSpeed: Math.min(speedLimit, Math.max(ego.speed, target.speed + 3.2)),
-            targetLateral: passLateral,
+            targetLateral: overtakeLane, // Overtake via right lane
             reasons: [
-              `Autonomous overtake in progress · Passing ${target.label}`,
-              "Replan trajectory active · Adjacent corridor engaged",
+              `Autonomous overtake in progress · Passing ${target.label} via right lane (Indian rules)`,
+              "Replan trajectory active · Right corridor engaged",
               "Maintaining safe lateral separation envelope",
             ],
             lastUpdate: inputs.simTime,
@@ -51,15 +53,15 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
             overtakeTargetId,
           };
         } else {
-          // Completed pass! Switch to RETURNING phase
+          // Completed pass! Switch to RETURNING phase back to left lane
           overtakePhase = "RETURNING";
           return {
             mode: "REPLAN",
             targetSpeed: speedLimit,
-            targetLateral: 0,
+            targetLateral: nominalLane, // Return to left lane
             reasons: [
-              `Overtake of ${target.label} complete · Returning to lane centerline`,
-              "Re-centering trajectory engaged · Nominal corridor restoring",
+              `Overtake of ${target.label} complete · Returning to left lane (Indian rules)`,
+              "Re-centering trajectory engaged · Nominal left corridor restoring",
             ],
             lastUpdate: inputs.simTime,
             decisionCount: state.decisionCount + 1,
@@ -75,18 +77,18 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
 
     // 2. If in RETURNING phase:
     if (overtakePhase === "RETURNING") {
-      if (Math.abs(ego.lateral) < 0.22) {
-        // Successfully re-centered!
+      if (Math.abs(ego.lateral - nominalLane) < 0.22) {
+        // Successfully re-centered in left lane!
         overtakePhase = "NONE";
         overtakeTargetId = null;
       } else {
         return {
           mode: "REPLAN",
           targetSpeed: speedLimit,
-          targetLateral: 0,
+          targetLateral: nominalLane,
           reasons: [
-            "Returning to nominal travel lane after overtake",
-            "Smoothly re-centering vehicle heading and lateral offset",
+            "Returning to left travel lane after overtake (Indian rules)",
+            "Smoothly re-centering vehicle heading and lateral offset in left lane",
           ],
           lastUpdate: inputs.simTime,
           decisionCount: state.decisionCount + 1,
@@ -106,19 +108,17 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
         if (dx <= 4 || dx > 38) return false;
         // Moving slower than our target speed limit by at least 2.0 m/s
         if (a.speed >= speedLimit * 0.85) return false;
-        // Within our lane corridor
+        // Within our left lane corridor
         if (Math.abs(a.position.y - ego.lateral) > 2.0) return false;
         return true;
       });
 
       if (slowVehicle) {
-        const passSide = slowVehicle.position.y <= 0 ? 1 : -1;
-        const passLateral = passSide * 1.85;
-        const isRoadSpaceAvailable = Math.abs(passLateral) <= roadHalfWidth - 0.8;
+        const isRoadSpaceAvailable = Math.abs(overtakeLane) <= roadHalfWidth - 0.8;
         const isAdjacentClear = !agents.some(
           (a) =>
             a.id !== slowVehicle.id &&
-            Math.abs(a.position.y - passLateral) < 1.3 &&
+            Math.abs(a.position.y - overtakeLane) < 1.3 &&
             Math.abs(a.position.x - ego.position.x) < 45,
         );
 
@@ -128,11 +128,11 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
           return {
             mode: "REPLAN",
             targetSpeed: Math.min(speedLimit, Math.max(ego.speed, slowVehicle.speed + 3.2)),
-            targetLateral: passLateral,
+            targetLateral: overtakeLane, // Move to right lane for overtaking
             reasons: [
-              `Slower vehicle ahead (${slowVehicle.label}) · Safe overtake window identified`,
-              "Autonomous overtake engaged · Generating dynamic replan trajectory",
-              "Initiating smooth lane shift into adjacent corridor",
+              `Slower vehicle ahead (${slowVehicle.label}) in left lane`,
+              "Indian traffic rules: Initiating overtake via right lane",
+              "Dynamic overtake trajectory engaged into right corridor",
             ],
             lastUpdate: inputs.simTime,
             decisionCount: state.decisionCount + 1,
@@ -170,10 +170,10 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
     reasons.push("No immediate path conflict");
     reasons.push("TTC above intervention threshold");
     reasons.push("Prediction confidence stable");
-    reasons.push("Path clear · Cruising at speed limit");
+    reasons.push("Cruising in left lane (Indian traffic rule compliant)");
     mode2 = "CRUISE";
     targetSpeed = speedLimit;
-    targetLateral = 0;
+    targetLateral = nominalLane; // Keep in left lane during normal cruising
   } else {
     reasons.push(
       risk.nearestAgentId ? `Relevant agent tracked · ${risk.nearestAgentId}` : "Elevated uncertainty in scene",
@@ -210,7 +210,7 @@ export function runPlanner(state: PlannerState, inputs: PlannerInputs): PlannerS
     }
 
     if (!replanActive) {
-      targetLateral = 0;
+      targetLateral = nominalLane;
       if (
         isDirectLaneBlock ||
         risk.ttc <= hardTtcThreshold ||

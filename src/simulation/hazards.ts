@@ -120,7 +120,7 @@ export function createHazardAgent(
         behavior: "cutIn",
         uncertainty: 0.28,
         hidden: false,
-        path: [{ x: ego.position.x + 14, y: 0 }],
+        path: [{ x: ego.position.x + 14, y: ego.lateral }],
         pathIndex: 0,
         spawnTime: simTime,
         hazardTag: type,

@@ -74,13 +74,14 @@ function pushEvent(state: SimState, category: SimEvent["category"], message: str
 export function createInitialState(scenarioId: ScenarioId, mode: ControlMode, seed: number): SimState {
   const scenario = SCENARIOS[scenarioId];
   const rand = mulberry32(seed);
+  const nominalLateral = -Math.min(2.0, Math.max(1.3, (scenario.road.width / 2) * 0.45));
   const ego: EgoState = {
-    position: { x: 0, y: 0 },
+    position: { x: 0, y: nominalLateral },
     heading: 0,
     speed: (scenario.speedLimitKmh * 0.55) * MS_PER_KMH,
     acceleration: 0,
-    targetLateral: 0,
-    lateral: 0,
+    targetLateral: nominalLateral,
+    lateral: nominalLateral,
     braking: false,
     emergencyBraking: false,
     turnSignal: "none",
@@ -117,14 +118,14 @@ export function createInitialState(scenarioId: ScenarioId, mode: ControlMode, se
     plannedPath: planEgoPath(ego, scenario.road),
     replanPath: null,
     risk,
-    planner: { mode: "CRUISE", targetSpeed: ego.speed, targetLateral: 0, reasons: ["System initializing"], lastUpdate: 0, decisionCount: 0, overtakePhase: "NONE", overtakeTargetId: null },
+    planner: { mode: "CRUISE", targetSpeed: ego.speed, targetLateral: nominalLateral, reasons: ["System initializing · Left-lane cruising nominal"], lastUpdate: 0, decisionCount: 0, overtakePhase: "NONE", overtakeTargetId: null },
     reflex: { status: "MONITORING", triggers: [], lastUpdate: 0, overrideActive: false, activationCount: 0, stoppingMarginState: "NOMINAL" },
     events: [],
     eventSeq: 0,
     metrics: initMetrics(),
     pipelineStage: "SENSE",
     controlAccel: 0,
-    controlLateral: 0,
+    controlLateral: nominalLateral,
     lastRiskLevel: "SAFE",
     lastPlannerMode: "CRUISE",
     lastOverrideActive: false,
